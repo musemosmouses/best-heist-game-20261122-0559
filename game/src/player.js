@@ -2,7 +2,7 @@
 // toward the mouse, pockets the small loot, lifts the Sunspire Diamond, and slips out the
 // service exit. Movement collides with the room's solid cases so the thief cannot walk through
 // the furniture.
-import { COIN, SCORE, THIEF } from './config.js';
+import { COIN, SCORE, SMOKE, THIEF } from './config.js';
 import { clampToRoom } from './level.js';
 
 export function createThief(spawn) {
@@ -10,6 +10,7 @@ export function createThief(spawn) {
     x: spawn.x,
     y: spawn.y,
     radius: THIEF.radius,
+    facing: -Math.PI / 2,
     sneaking: false,
     moving: false,
     coins: COIN.count,
@@ -52,6 +53,7 @@ export function moveThief(thief, move, sneak, dt, solids) {
   const length = Math.hypot(move.x, move.y);
   const nx = move.x / length;
   const ny = move.y / length;
+  thief.facing = Math.atan2(ny, nx);
   thief.x += nx * speed * dt;
   thief.y += ny * speed * dt;
   const clamped = clampToRoom(thief.x, thief.y, thief.radius);
@@ -88,6 +90,37 @@ export function updateCoin(thief, dt) {
   }
   coin.x = coin.fromX + (coin.toX - coin.fromX) * coin.t;
   coin.y = coin.fromY + (coin.toY - coin.fromY) * coin.t;
+}
+
+/** How many smoke pellets the coin purse can still afford: each one costs 2 coins. */
+export function smokesAffordable(thief) {
+  return Math.floor(thief.coins / SMOKE.costCoins);
+}
+
+/** Burst a smoke pellet at the thief's feet: it costs 2 coins and blinds every cone and
+ *  camera while the thief stands inside the cloud. Returns the cloud, or null when the
+ *  purse is too light. */
+export function useSmokePellet(thief) {
+  if (thief.coins < SMOKE.costCoins) return null;
+  thief.coins -= SMOKE.costCoins;
+  return { x: thief.x, y: thief.y, radius: SMOKE.radius, left: SMOKE.seconds };
+}
+
+/** Age the smoke clouds one step; a spent cloud is gone. */
+export function updateSmokeClouds(smokes, dt) {
+  for (let index = smokes.length - 1; index >= 0; index -= 1) {
+    smokes[index].left -= dt;
+    if (smokes[index].left <= 0) smokes.splice(index, 1);
+  }
+}
+
+/** True when the thief stands inside any live smoke cloud. */
+export function thiefInSmoke(thief, smokes) {
+  if (!smokes) return false;
+  for (const cloud of smokes) {
+    if (Math.hypot(thief.x - cloud.x, thief.y - cloud.y) < cloud.radius) return true;
+  }
+  return false;
 }
 
 /** Pocket any small loot the thief is touching; returns the points earned. */

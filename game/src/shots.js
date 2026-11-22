@@ -26,14 +26,13 @@ const ROUTE_TO_LOOT = [
   { x: 1180, y: 280 },
   { x: 1130, y: 150 },
 ];
-/** The play scene's route: pocket a gold bar, then cut straight across Ash's beat — spotted
- *  once, alarm up, score on the board — before ducking back to cover. */
+/** The play scene's route: pocket a gold bar, then step onto Ash's beat and stand in the
+ *  patrol's way — spotted once, alarm up, score on the board — before the frame is taken. */
 const ROUTE_PLAY = [
   { x: 300, y: 520 },
   { x: 430, y: 430 },
   { x: 440, y: 360 },
-  { x: 640, y: 280 },
-  { x: 700, y: 430 },
+  { x: 600, y: 280 },
 ];
 const ROUTE_TO_EXIT = [
   { x: 1180, y: 280 },
@@ -51,8 +50,8 @@ const ROUTE_TO_EXIT = [
 function probeNotice(game, x, y) {
   const probe = { x, y, radius: 13 };
   let notice = 0;
-  for (const guard of game.guards) notice = Math.max(notice, guardNotice(guard, probe, game.level.solids, game.level.plants));
-  for (const camera of game.cameras) notice = Math.max(notice, cameraNotice(camera, probe, game.level.solids, game.level.plants));
+  for (const guard of game.guards) notice = Math.max(notice, guardNotice(guard, probe, game.level.solids, game.level.plants, game.smokes));
+  for (const camera of game.cameras) notice = Math.max(notice, cameraNotice(camera, probe, game.level.solids, game.level.plants, game.smokes));
   return notice;
 }
 
@@ -77,14 +76,14 @@ function makePilot(game, waypoints, careful) {
   let boldTime = 0;
   return function pilot() {
     const thief = game.thief;
-    if (index >= waypoints.length) return { move: { x: 0, y: 0 }, sneak: true, throwAt: null };
+    if (index >= waypoints.length) return { move: { x: 0, y: 0 }, sneak: true, throwAt: null, smoke: false };
     const target = waypoints[index];
     const dx = target.x - thief.x;
     const dy = target.y - thief.y;
     const dist = Math.hypot(dx, dy);
     if (dist < 14) {
       index += 1;
-      return { move: { x: 0, y: 0 }, sneak: true, throwAt: null };
+      return { move: { x: 0, y: 0 }, sneak: true, throwAt: null, smoke: false };
     }
     const speed = 102;
     const nextX = thief.x + (dx / dist) * speed * SAMPLE;
@@ -98,7 +97,7 @@ function makePilot(game, waypoints, careful) {
       const awayY = thief.y - close.y;
       const awayDist = Math.hypot(awayX, awayY) || 1;
       waitTime = 0;
-      return { move: { x: awayX / awayDist, y: awayY / awayDist }, sneak: true, throwAt: null };
+      return { move: { x: awayX / awayDist, y: awayY / awayDist }, sneak: true, throwAt: null, smoke: false };
     }
     // Wait out a cone only from cover: standing still while already seen just lets the
     // alarm climb, so a thief in the open pushes through instead of freezing.
@@ -111,12 +110,12 @@ function makePilot(game, waypoints, careful) {
         waitTime = 0;
         boldTime = 4;
       } else {
-        return { move: { x: 0, y: 0 }, sneak: true, throwAt: null };
+        return { move: { x: 0, y: 0 }, sneak: true, throwAt: null, smoke: false };
       }
     } else {
       waitTime = 0;
     }
-    return { move: { x: dx / dist, y: dy / dist }, sneak: true, throwAt: null };
+    return { move: { x: dx / dist, y: dy / dist }, sneak: true, throwAt: null, smoke: false };
   };
 }
 
@@ -144,9 +143,11 @@ export function stageShot(name, game, step) {
   }
   if (name === 'play') {
     // Bold through the cones until the alarm is up and a little loot is pocketed, then stop:
-    // a thief mid-heist, spotted once, score on the board.
+    // a thief mid-heist, spotted once, score on the board. The route ends standing on
+    // Ash's beat, so the patrol walks into the frame and the alarm is still climbing
+    // when the shot is taken.
     const pilot = makePilot(game, ROUTE_PLAY, false);
-    simulate(game, step, pilot, PLAY_LIMIT_SECONDS, (state) => state.alarm >= 25 && state.score > 0);
+    simulate(game, step, pilot, PLAY_LIMIT_SECONDS, (state) => state.alarm >= 20 && state.score > 0);
     return { screen: SCREEN_PLAY, best: game.score };
   }
   if (name === 'loot') {

@@ -1,8 +1,10 @@
 // The gallery's wall cameras: they never walk, they sweep. Each one swings its cone back and
 // forth around the direction it faces, and a thief caught in the cone, in the open and in line
 // of sight, is seen — the same notice scale the guards use, so the alarm climbs the same way.
+// A thief inside a smoke cloud is invisible to them too.
 import { CAMERA, THIEF } from './config.js';
 import { lineOfSight } from './level.js';
+import { thiefInSmoke } from './player.js';
 
 export function createCamera(mount, index) {
   return {
@@ -24,8 +26,10 @@ export function updateCamera(camera, dt) {
   camera.angle = camera.baseAngle + Math.sin(camera.time * CAMERA.sweepSpeed) * camera.sweep;
 }
 
-/** How strongly this camera notices the thief right now: 0 outside the cone or behind cover. */
-export function cameraNotice(camera, thief, solids, plants) {
+/** How strongly this camera notices the thief right now: 0 outside the cone, behind cover,
+ *  or inside a smoke cloud. */
+export function cameraNotice(camera, thief, solids, plants, smokes) {
+  if (thiefInSmoke(thief, smokes)) return 0;
   const dx = thief.x - camera.x;
   const dy = thief.y - camera.y;
   const dist = Math.hypot(dx, dy);
@@ -44,9 +48,9 @@ export function cameraNotice(camera, thief, solids, plants) {
 }
 
 /** One step of a camera: sweep, then report whether it sees the thief. */
-export function updateCameraSeen(camera, dt, thief, solids, plants) {
+export function updateCameraSeen(camera, dt, thief, solids, plants, smokes) {
   updateCamera(camera, dt);
-  const notice = cameraNotice(camera, thief, solids, plants);
+  const notice = cameraNotice(camera, thief, solids, plants, smokes);
   camera.seen = notice > 0;
   return notice;
 }

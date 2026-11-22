@@ -63,8 +63,11 @@ export function clampToRoom(x, y, radius) {
  */
 export function buildLevel() {
   const solids = [
-    // The vault alcove: three solid walls, open on the left where the thief slips in.
-    { x: 1010, y: ROOM.y, width: 18, height: 190 },
+    // The vault alcove: three solid walls, open at the bottom where the thief slips in —
+    // and a side passage cut through its west wall, a second way into the vault that
+    // skips Brine's beat along the south side.
+    { x: 1010, y: ROOM.y, width: 18, height: 90 },
+    { x: 1010, y: ROOM.y + 150, width: 18, height: 40 },
     { x: 1010, y: ROOM.y, width: 222, height: 18 },
     { x: 1010, y: ROOM.y + 172, width: 130, height: 18 },
     // Display cases and crates: solid cover the thief ducks behind.
@@ -73,21 +76,28 @@ export function buildLevel() {
     { x: 560, y: 330, width: 112, height: 68 },
     { x: 980, y: 330, width: 118, height: 68 },
     { x: 430, y: 470, width: 220, height: 52 },
+    // A crate guarding the side passage's mouth, cover for the second route in.
+    { x: 860, y: 180, width: 90, height: 44 },
   ];
   const plants = [
     { x: 300, y: 520, radius: 40 },
     { x: 900, y: 520, radius: 40 },
     { x: 640, y: 560, radius: 34 },
     { x: 180, y: 300, radius: 34 },
+    { x: 950, y: 300, radius: 30 },
   ];
   const smallLoot = [
     { x: 440, y: 360, taken: false, kind: 'bar' },
     { x: 850, y: 590, taken: false, kind: 'case' },
     { x: 250, y: 170, taken: false, kind: 'bar' },
+    // A gold bar stashed just outside the side passage: the second route pays.
+    { x: 955, y: 200, taken: false, kind: 'bar' },
   ];
   const guardBeats = [
     {
       name: 'Ash',
+      kind: 'patrol',
+      color: '#2c3e55',
       points: [
         { x: 300, y: 280 },
         { x: 950, y: 280 },
@@ -95,6 +105,8 @@ export function buildLevel() {
     },
     {
       name: 'Brine',
+      kind: 'patrol',
+      color: '#1f4d3a',
       points: [
         { x: 1030, y: 300 },
         { x: 1030, y: 560 },
@@ -102,15 +114,33 @@ export function buildLevel() {
     },
     {
       name: 'Moss',
+      kind: 'patrol',
+      color: '#5a4a1f',
       points: [
         { x: 880, y: 130 },
         { x: 980, y: 250 },
         { x: 820, y: 250 },
       ],
     },
+    {
+      name: 'Sable',
+      kind: 'sweeper',
+      color: '#6e2b2b',
+      points: [
+        { x: 250, y: 640 },
+        { x: 1050, y: 640 },
+      ],
+    },
+    {
+      name: 'Wren',
+      kind: 'watcher',
+      color: '#4a4a52',
+      baseAngle: Math.PI / 2,
+      points: [{ x: 520, y: 200 }],
+    },
   ];
   const cameraMounts = [
-    { x: 640, y: ROOM.y + 2, baseAngle: Math.PI / 2, sweep: 0.85, phase: 0 },
+    { x: ROOM.x + 2, y: 300, baseAngle: 0, sweep: 0.7, phase: 0 },
     { x: ROOM.x + ROOM.width - 2, y: 380, baseAngle: Math.PI, sweep: 0.7, phase: 1.4 },
   ];
   return {

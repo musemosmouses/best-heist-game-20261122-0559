@@ -9,7 +9,7 @@ export const STEP = 1 / 60;
 
 /** The thief: quick on foot, half speed and half as noticeable while sneaking. */
 export const THIEF = {
-  radius: 13,
+  radius: 16,
   walkSpeed: 205,
   sneakSpeed: 102,
   catchRadius: 26,
@@ -17,20 +17,29 @@ export const THIEF = {
 
 export const TIMER_START = 180;
 
-/** The alarm meter: 0 to 100. Seen, it climbs; hidden, it falls. At 100 the thief is caught. */
+/** The alarm meter: 0 to 100. Seen, it climbs; hidden, it falls. At 100 the thief is caught.
+ *  Under 50 the gallery is CALM, 50 to 74 WARY, 75 and up HUNTED — each stage its own
+ *  colour, label and sound cue. */
 export const ALARM = {
   max: 100,
   risePerSecond: 55,
   fallPerSecond: 12,
   closeBonus: 1.6,
   sneakFactor: 0.45,
+  waryAt: 50,
+  huntedAt: 75,
 };
 
 /** Guards walk their beats; a guard that spots the thief raises the alarm, and one that
- *  touches the thief catches them outright. */
+ *  touches the thief catches them outright. Three kinds walk the gallery: patrol guards on
+ *  their rounds, a sweeper who crosses the hall fast, and a watcher who stands still and
+ *  scans. */
 export const GUARD = {
-  radius: 14,
+  radius: 16,
   patrolSpeed: 88,
+  sweeperSpeed: 128,
+  watcherScanSpeed: 0.9,
+  watcherScan: 1.1,
   hurrySpeed: 118,
   sightRange: 250,
   sightHalfAngle: 0.56,
@@ -46,10 +55,19 @@ export const CAMERA = {
 
 /** Lure coins: tossed with a click or E, they clink and pull the nearest guard over to look. */
 export const COIN = {
-  count: 3,
+  count: 4,
   flySeconds: 0.45,
   lureRadius: 330,
   inspectSeconds: 2.2,
+};
+
+/** Smoke pellets: burst with Q at the thief's feet, a grey cloud that blinds every cone and
+ *  camera while the thief stands inside it. Each one costs 2 coins, so a smoke is a lure
+ *  forgone — the HUD shows how many the coin purse can still afford. */
+export const SMOKE = {
+  costCoins: 2,
+  radius: 170,
+  seconds: 4,
 };
 
 export const LIVES = 1;
@@ -62,32 +80,43 @@ export const SCORE = {
   timePerSecond: 5,
 };
 
-/** The room's palette: deep green marble, brass, and warm lamplight, so cover, danger and
- *  loot read at a glance even when the screenshot is shrunk to a contact sheet. */
+/** The room's palette: warm parquet and brass under lamplight, so cover, danger and loot
+ *  read at a glance even when the screenshot is shrunk to a contact sheet. Safe cover is
+ *  lush green, danger is amber and red, loot is gold. */
 export const PALETTE = {
   backdrop: '#0c1210',
-  hud: '#101a16',
-  hudEdge: '#2b3f36',
-  floorA: '#1d2f27',
-  floorB: '#182720',
-  carpet: '#7a2e35',
+  hud: '#14100c',
+  hudEdge: '#4a3823',
+  floorA: '#7b5433',
+  floorB: '#6e4a2c',
+  floorC: '#835c38',
+  plankLine: 'rgba(0, 0, 0, 0.28)',
+  carpet: '#8a2f38',
   carpetEdge: '#c9a227',
   wall: '#3a2f22',
   wallTop: '#5a4630',
+  wallShadow: 'rgba(0, 0, 0, 0.35)',
+  lampGlow: 'rgba(255, 190, 90, 0.10)',
   glass: 'rgba(140, 200, 220, 0.20)',
   pedestal: '#4a3b28',
   crate: '#6b4e2e',
-  plant: '#2f6b3a',
-  plantDark: '#1e4a28',
+  plant: '#2f8b46',
+  plantDark: '#1e5a30',
+  plantHalo: 'rgba(80, 200, 110, 0.16)',
+  smoke: 'rgba(205, 205, 210, 0.38)',
+  smokeEdge: 'rgba(230, 230, 235, 0.55)',
   guard: '#2c3e55',
   guardCap: '#1a2636',
-  cone: 'rgba(242, 201, 76, 0.20)',
-  coneEdge: 'rgba(242, 201, 76, 0.55)',
-  camCone: 'rgba(229, 83, 75, 0.16)',
-  camConeEdge: 'rgba(229, 83, 75, 0.5)',
+  cone: 'rgba(242, 201, 76, 0.26)',
+  coneEdge: 'rgba(242, 201, 76, 0.7)',
+  coneSeen: 'rgba(229, 83, 75, 0.30)',
+  coneSeenEdge: 'rgba(229, 83, 75, 0.85)',
+  camCone: 'rgba(229, 83, 75, 0.20)',
+  camConeEdge: 'rgba(229, 83, 75, 0.6)',
   camera: '#8a94a3',
   thief: '#12b5a5',
   thiefDark: '#0a7d72',
+  thiefCloak: '#0d3f3a',
   loot: '#f2c94c',
   lootGlow: 'rgba(242, 201, 76, 0.35)',
   exit: '#3fae5a',
@@ -95,7 +124,7 @@ export const PALETTE = {
   alarmMid: '#f2c94c',
   alarmHigh: '#e5534b',
   text: '#eef1f5',
-  muted: '#9aa79e',
+  muted: '#b9c2b4',
   panel: '#17241e',
 };
 

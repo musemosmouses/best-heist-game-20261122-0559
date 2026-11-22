@@ -5,7 +5,7 @@
 // ?seed=N fixes the patrols and sweeps. ?shot=start|play|loot|end (with &seed=N) stages that
 // scene instead of running the loop, paints it twice and sets window.__shotReady for a
 // screenshot. window.__heist exposes the live state for play-testing.
-import { BEST_KEY, COIN, SCORE, STEP, TIMER_START } from './config.js';
+import { ALARM, BEST_KEY, COIN, SCORE, SMOKE, STEP, TIMER_START } from './config.js';
 import { createRandom } from './random.js';
 import { buildLevel } from './level.js';
 import { alarmFromNotice, createGuard, lureGuard, updateGuard } from './guard.js';
@@ -15,10 +15,14 @@ import {
   collectLoot,
   createThief,
   moveThief,
+  smokesAffordable,
   thiefEscaped,
   thiefHidden,
+  thiefInSmoke,
   throwCoin,
   updateCoin,
+  updateSmokeClouds,
+  useSmokePellet,
 } from './player.js';
 import { createAudio } from './audio.js';
 import { createRenderer, SCREEN_OVER, SCREEN_PAUSED, SCREEN_PLAY, SCREEN_TITLE, SCREEN_WIN } from './render.js';
@@ -45,6 +49,7 @@ export function createGame(random) {
     thief: createThief(level.spawn),
     guards: level.guardBeats.map((beat, index) => createGuard(beat, index)),
     cameras: level.cameraMounts.map((mount, index) => createCamera(mount, index)),
+    smokes: [],
     alarm: 0,
     score: 0,
     timeLeft: TIMER_START,
@@ -53,6 +58,13 @@ export function createGame(random) {
     loseReason: '',
     lastTickSecond: -1,
     alarmSoundAt: 0,
+    /** The SPOTTED! grace: seconds left of the fair warning after a first close sighting. */
+    graceLeft: 0,
+    spottedBy: '',
+    /** Who last raised the alarm — named on the caught screen. */
+    lastSeenBy: '',
+    /** The win screen's score breakdown, filled as the run earns it. */
+    breakdown: { loot: 0, diamond: 0, time: 0, coins: 0 },
   };
 }
 
@@ -67,9 +79,9 @@ function readMove(keys) {
 }
 
 /**
- * One fixed step of a run. `input` is { move: {x, y}, sneak, throwAt: {x, y} | null }.
- * Returns an event string for the caller to announce or sound: 'coin', 'loot', 'diamond',
- * 'win', 'caught' or ''.
+ * One fixed step of a run. `input` is { move: {x, y}, sneak, throwAt: {x, y} | null,
+ * smoke: boolean }. Returns an event string for the caller to announce or sound:
+ * 'coin', 'loot', 'diamond', 'win', 'caught' or ''.
  */
 export function stepGame(state, input, dt) {
   if (state.phase !== 'play') return '';
@@ -94,7 +106,15 @@ export function stepGame(state, input, dt) {
       audio.clink();
     }
   }
+  if (input.smoke) {
+    const cloud = useSmokePellet(state.thief);
+    if (cloud !== null) {
+      state.smokes.push(cloud);
+      audio.smoke();
+    }
+  }
   updateCoin(state.thief, dt);
+  updateSmokeClouds(state.smokes, dt);
 
   const coin = state.thief.coin;
   if (coin !== null && coin.landed) {
@@ -109,25 +129,50 @@ export function stepGame(state, input, dt) {
 
   let notice = 0;
   for (const guard of state.guards) {
-    notice = Math.max(notice, updateGuard(guard, dt, state.thief, state.level.solids, state.level.plants));
-    if (Math.hypot(guard.x - state.thief.x, guard.y - state.thief.y) < 26) {
+    const guardNotice = updateGuard(guard, dt, state.thief, state.level.solids, state.level.plants, state.smokes);
+    notice = Math.max(notice, guardNotice);
+    if (guardNotice > 0) state.lastSeenBy = guard.name;
+    // A fair caught moment: the first time a guard spots Rook at close range, flash
+    // SPOTTED! and give 0.6 s of grace before a grab can land — time to break away.
+    const dist = Math.hypot(guard.x - state.thief.x, guard.y - state.thief.y);
+    // A fair caught moment: the first time this guard spots Rook at close range in one
+    // sighting, flash SPOTTED! and give 0.6 s of grace before a grab can land — time to
+    // break away. (A sighting starts far off, so the trigger is the close range itself,
+    // not the first frame the guard sees anything.)
+    if (!guard.seen) guard.closeSpotted = false;
+    else if (dist < 120 && !guard.closeSpotted && state.graceLeft <= 0) {
+      guard.closeSpotted = true;
+      state.graceLeft = 0.6;
+      state.spottedBy = guard.name;
+      audio.spotted();
+    }
+    // A guard cannot grab a thief it cannot see inside a smoke cloud: the cloud hides
+    // Rook from hands as well as from eyes, so a smoke pellet is a real escape.
+    if (state.graceLeft <= 0 && dist < 26 && !thiefInSmoke(state.thief, state.smokes)) {
       state.phase = 'over';
       state.loseReason = `${guard.name} grabbed Rook by the collar.`;
       return 'caught';
     }
   }
   for (const camera of state.cameras) {
-    notice = Math.max(notice, updateCameraSeen(camera, dt, state.thief, state.level.solids, state.level.plants));
+    const cameraNotice = updateCameraSeen(camera, dt, state.thief, state.level.solids, state.level.plants, state.smokes);
+    notice = Math.max(notice, cameraNotice);
+    if (cameraNotice > 0) state.lastSeenBy = `Camera ${camera.index + 1}`;
+  }
+  if (state.graceLeft > 0) {
+    state.graceLeft -= dt;
+    if (notice <= 0) state.graceLeft = 0;
   }
   if (notice > 0) {
     const climb = alarmFromNotice(notice, state.thief.sneaking, dt);
     const before = state.alarm;
     state.alarm += climb;
-    if (before < 50 && state.alarm >= 50) audio.alarm();
+    if (before < ALARM.waryAt && state.alarm >= ALARM.waryAt) audio.alarm();
+    if (before < ALARM.huntedAt && state.alarm >= ALARM.huntedAt) audio.wary();
     if (state.alarm >= 100) {
       state.alarm = 100;
       state.phase = 'over';
-      state.loseReason = 'The alarm hit 100 — the gallery locked down.';
+      state.loseReason = `The alarm hit 100 — ${state.lastSeenBy} raised it.`;
       return 'caught';
     }
   } else {
@@ -137,19 +182,22 @@ export function stepGame(state, input, dt) {
   const gained = collectLoot(state.thief, state.level.smallLoot);
   if (gained > 0) {
     state.score += gained;
+    state.breakdown.loot += gained;
     audio.pickup();
     return 'loot';
   }
   const diamond = collectDiamond(state.thief, state.level.loot);
   if (diamond > 0) {
     state.score += diamond;
+    state.breakdown.diamond += diamond;
     audio.diamond();
     return 'diamond';
   }
   if (thiefEscaped(state.thief, state.level.exit)) {
     state.phase = 'win';
-    state.score += state.thief.coins * SCORE.coinLeft;
-    state.score += Math.ceil(state.timeLeft) * SCORE.timePerSecond;
+    state.breakdown.coins = state.thief.coins * SCORE.coinLeft;
+    state.breakdown.time = Math.ceil(state.timeLeft) * SCORE.timePerSecond;
+    state.score += state.breakdown.coins + state.breakdown.time;
     return 'win';
   }
   return '';
@@ -187,6 +235,7 @@ function runShot(name) {
 function runGame() {
   const keys = new Set();
   let throwAt = null;
+  let smoke = false;
   let mouse = null;
   let screen = SCREEN_TITLE;
   let best = readBest();
@@ -240,6 +289,10 @@ function runGame() {
       }
       return;
     }
+    if (event.code === 'KeyQ') {
+      if (screen === SCREEN_PLAY) smoke = true;
+      return;
+    }
     keys.add(event.code);
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) event.preventDefault();
   });
@@ -270,15 +323,17 @@ function runGame() {
       while (accumulator >= STEP && (screen === SCREEN_TITLE || screen === SCREEN_PLAY)) {
         if (screen === SCREEN_TITLE) {
           game.elapsed += STEP;
-          for (const guard of game.guards) updateGuard(guard, STEP, game.thief, game.level.solids, game.level.plants);
-          for (const camera of game.cameras) updateCameraSeen(camera, STEP, game.thief, game.level.solids, game.level.plants);
+          for (const guard of game.guards) updateGuard(guard, STEP, game.thief, game.level.solids, game.level.plants, game.smokes);
+          for (const camera of game.cameras) updateCameraSeen(camera, STEP, game.thief, game.level.solids, game.level.plants, game.smokes);
         } else {
           const input = {
             move: readMove(keys),
             sneak: keys.has('ShiftLeft') || keys.has('ShiftRight'),
             throwAt,
+            smoke,
           };
           throwAt = null;
+          smoke = false;
           const event = stepGame(game, input, STEP);
           if (event === 'win' || event === 'caught') endGame(event);
         }
@@ -304,16 +359,24 @@ function runGame() {
 /** The play-test hook: live state, a fresh game, and one scripted step at a time. */
 window.__heist = {
   state() {
+    const stage = game.alarm < ALARM.waryAt ? 'CALM' : game.alarm < ALARM.huntedAt ? 'WARY' : 'HUNTED';
     return {
       phase: game.phase,
       alarm: Math.round(game.alarm * 10) / 10,
+      alarmStage: stage,
       score: game.score,
       timeLeft: Math.round(game.timeLeft * 10) / 10,
       thief: { x: Math.round(game.thief.x), y: Math.round(game.thief.y), coins: game.thief.coins, hasDiamond: game.thief.hasDiamond },
-      guards: game.guards.map((g) => ({ name: g.name, x: Math.round(g.x), y: Math.round(g.y), mode: g.mode, seen: g.seen })),
+      guards: game.guards.map((g) => ({ name: g.name, kind: g.kind, x: Math.round(g.x), y: Math.round(g.y), mode: g.mode, seen: g.seen })),
       cameras: game.cameras.map((c) => ({ angle: Math.round(c.angle * 100) / 100, seen: c.seen })),
       lootTaken: game.level.smallLoot.filter((l) => l.taken).length,
       diamondTaken: game.level.loot.taken,
+      smokes: game.smokes.length,
+      smokeReady: smokesAffordable(game.thief),
+      spotted: game.graceLeft > 0,
+      spottedBy: game.spottedBy,
+      lastSeenBy: game.lastSeenBy,
+      breakdown: { ...game.breakdown },
       loseReason: game.loseReason,
     };
   },

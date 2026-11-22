@@ -68,6 +68,20 @@ export function createAudio() {
     alarm() {
       tone(440, 0.18, 'square', 620);
     },
+    /** The alarm crossing into WARY: two short rising notes. */
+    wary() {
+      tone(520, 0.12, 'square', 660);
+      setTimeout(() => tone(660, 0.14, 'square', 780), 130);
+    },
+    /** A guard's first close sighting: a sharp two-note sting with the SPOTTED! flash. */
+    spotted() {
+      tone(880, 0.1, 'square', 1100);
+      setTimeout(() => tone(1100, 0.14, 'square', 880), 110);
+    },
+    /** A smoke pellet bursting: a low falling hush. */
+    smoke() {
+      tone(320, 0.4, 'sine', 70);
+    },
     /** The clock's last-seconds tick, quiet so it never drowns the alarm. */
     tick() {
       tone(1200, 0.05, 'square');
