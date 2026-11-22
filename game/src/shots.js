@@ -4,7 +4,7 @@
 // is what a short game really looks like and the same seed always gives the same frame.
 import { STEP } from './config.js';
 import { guardNotice, updateGuard } from './guard.js';
-import { cameraNotice, updateCameraSeen } from './camera.js';
+import { cameraNotice, laserNotice, updateCameraSeen } from './camera.js';
 import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE, SCREEN_WIN } from './render.js';
 
 const START_SECONDS = 5;
@@ -46,12 +46,13 @@ const ROUTE_TO_EXIT = [
   { x: 140, y: 660 },
 ];
 
-/** The strongest notice any guard or camera has of a thief standing at (x, y). */
+/** The strongest notice any guard, camera or laser has of a thief standing at (x, y). */
 function probeNotice(game, x, y) {
   const probe = { x, y, radius: 13 };
   let notice = 0;
   for (const guard of game.guards) notice = Math.max(notice, guardNotice(guard, probe, game.level.solids, game.level.plants, game.smokes));
   for (const camera of game.cameras) notice = Math.max(notice, cameraNotice(camera, probe, game.level.solids, game.level.plants, game.smokes));
+  for (const laser of game.lasers) notice = Math.max(notice, laserNotice(laser, probe));
   return notice;
 }
 
