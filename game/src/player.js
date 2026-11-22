@@ -2,7 +2,7 @@
 // toward the mouse, pockets the small loot, lifts the Sunspire Diamond, and slips out the
 // service exit. Movement collides with the room's solid cases so the thief cannot walk through
 // the furniture.
-import { COIN, SCORE, SMOKE, THIEF } from './config.js';
+import { COIN, SAFE, SCORE, SMOKE, THIEF } from './config.js';
 import { clampToRoom } from './level.js';
 
 export function createThief(spawn) {
@@ -121,6 +121,16 @@ export function thiefInSmoke(thief, smokes) {
     if (Math.hypot(thief.x - cloud.x, thief.y - cloud.y) < cloud.radius) return true;
   }
   return false;
+}
+
+/** True when the thief stands close enough to a wall safe to crack it. */
+export function nearSafe(thief, safes) {
+  if (!safes) return null;
+  for (const safe of safes) {
+    if (safe.cracked) continue;
+    if (Math.hypot(thief.x - safe.x, thief.y - safe.y) < SAFE.range + thief.radius) return safe;
+  }
+  return null;
 }
 
 /** Pocket any small loot the thief is touching; returns the points earned. */

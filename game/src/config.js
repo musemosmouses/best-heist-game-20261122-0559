@@ -17,6 +17,31 @@ export const THIEF = {
 
 export const TIMER_START = 180;
 
+/** Laser grids: a sweeping beam from a wall emitter. Crossing the beam trips the alarm
+ *  fast — the beam is thin, so a careful thief slips through between sweeps, but a
+ *  careless one is caught in the light. */
+export const LASER = {
+  sweepSpeed: 0.5,
+  triggerDist: 14,
+  risePerSecond: 70,
+};
+
+/** Wall safes: hold E beside one to crack it. Cracking while seen raises the alarm. */
+export const SAFE = {
+  crackSeconds: 3,
+  points: 250,
+  range: 52,
+};
+
+/** Three nights, one gallery, rising heat. Night 1 is the gallery as it stands; Night 2
+ *  wires the laser grid, adds a sixth guard and two crackable wall safes; Night 3 adds a
+ *  seventh guard, a tighter timer and two more pieces of small loot. */
+export const NIGHTS = [
+  { name: 'The Gallery', guards: 5, lasers: 0, timer: 180, extraLoot: 0, safes: 0 },
+  { name: 'Laser Grid', guards: 6, lasers: 2, timer: 180, extraLoot: 0, safes: 2 },
+  { name: 'Seven Guards', guards: 7, lasers: 2, timer: 150, extraLoot: 2, safes: 2 },
+];
+
 /** The alarm meter: 0 to 100. Seen, it climbs; hidden, it falls. At 100 the thief is caught.
  *  Under 50 the gallery is CALM, 50 to 74 WARY, 75 and up HUNTED — each stage its own
  *  colour, label and sound cue. */
@@ -76,6 +101,7 @@ export const LIVES = 1;
 export const SCORE = {
   smallLoot: 150,
   diamond: 1000,
+  safe: 250,
   coinLeft: 25,
   timePerSecond: 5,
 };
@@ -114,6 +140,14 @@ export const PALETTE = {
   camCone: 'rgba(229, 83, 75, 0.20)',
   camConeEdge: 'rgba(229, 83, 75, 0.6)',
   camera: '#8a94a3',
+  laser: '#ff3b30',
+  laserBeam: 'rgba(255, 59, 48, 0.45)',
+  laserCore: '#ff8a80',
+  laserHot: '#ff1744',
+  safe: '#c9a227',
+  safeDark: '#6b5312',
+  minimapBg: 'rgba(8, 12, 10, 0.82)',
+  minimapEdge: '#4a3823',
   thief: '#12b5a5',
   thiefDark: '#0a7d72',
   thiefCloak: '#0d3f3a',

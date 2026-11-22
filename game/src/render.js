@@ -2,8 +2,9 @@
 // is scaled to fit the window and centred, the margin filled with the backdrop colour. The HUD
 // band sits across the top of the field; the gallery room runs below it, so the alarm meter,
 // timer, score, loot and coins are always on screen with the room itself.
-import { ALARM, CAMERA, COIN, FIELD, FONT, GUARD, PALETTE, SCORE, SMOKE, THIEF } from './config.js';
+import { ALARM, CAMERA, COIN, FIELD, FONT, GUARD, LASER, NIGHTS, PALETTE, SAFE, SCORE, SMOKE, THIEF } from './config.js';
 import { ROOM } from './level.js';
+import { laserEnd } from './camera.js';
 
 export const SCREEN_TITLE = 'title';
 export const SCREEN_PLAY = 'play';
@@ -395,6 +396,86 @@ export function createRenderer(canvas) {
   }
 
   /** Smoke clouds: grey puffs that blind every cone while Rook stands inside one. */
+  /** Laser grids: a glowing red trip-beam from each wall emitter, bright red and
+   *  pulsing while a thief is standing on it. */
+  function drawLasers(state, time) {
+    for (const laser of state.lasers) {
+      const end = laserEnd(laser);
+      const hot = laser.tripped;
+      const pulse = hot ? 0.75 + 0.25 * Math.sin(time * 18) : 1;
+      context.globalAlpha = pulse;
+      // The beam's halo, then its bright core: a trip-wire you can read at a glance.
+      context.strokeStyle = PALETTE.laserBeam;
+      context.lineWidth = hot ? 14 : 9;
+      context.beginPath();
+      context.moveTo(laser.x, laser.y);
+      context.lineTo(end.x, end.y);
+      context.stroke();
+      context.strokeStyle = hot ? PALETTE.laserHot : PALETTE.laserCore;
+      context.lineWidth = hot ? 3.5 : 2.5;
+      context.beginPath();
+      context.moveTo(laser.x, laser.y);
+      context.lineTo(end.x, end.y);
+      context.stroke();
+      // A bright dot where the beam lands on the far wall or case.
+      context.fillStyle = hot ? PALETTE.laserHot : PALETTE.laserCore;
+      context.beginPath();
+      context.arc(end.x, end.y, hot ? 6 : 4, 0, Math.PI * 2);
+      context.fill();
+      context.globalAlpha = 1;
+      // The emitter: a dark box on the wall with a red lens.
+      context.fillStyle = '#1a1d22';
+      context.fillRect(laser.x - 10, laser.y - 8, 20, 16);
+      context.fillStyle = PALETTE.laser;
+      context.beginPath();
+      context.arc(laser.x, laser.y, 4, 0, Math.PI * 2);
+      context.fill();
+      text('LASER', laser.x, laser.y - 16, 11, PALETTE.laserCore, 'center');
+    }
+  }
+
+  /** Wall safes: a brass-fronted box set into the wall, its dial turning gold as the
+   *  crack progresses, its door open once the combination gives. */
+  function drawSafes(state) {
+    for (const safe of state.safes) {
+      const width = 46;
+      const height = 32;
+      const x = safe.x - width / 2;
+      const y = safe.y - height / 2;
+      context.fillStyle = PALETTE.safeDark;
+      context.fillRect(x, y, width, height);
+      context.fillStyle = safe.cracked ? PALETTE.loot : PALETTE.safe;
+      context.fillRect(x, y, width, 4);
+      context.strokeStyle = PALETTE.safe;
+      context.lineWidth = 2;
+      context.strokeRect(x + 0.5, y + 0.5, width, height);
+      if (safe.cracked) {
+        // The door hangs open on its hinge: gold inside, the safe is spent.
+        context.fillStyle = PALETTE.loot;
+        context.fillRect(x + 6, y + 8, width - 12, height - 14);
+        text('OPEN', safe.x, y + height + 14, 11, PALETTE.loot, 'center');
+      } else {
+        // The dial, and a progress ring that fills as Rook works the combination.
+        context.fillStyle = '#e8e4d8';
+        context.beginPath();
+        context.arc(safe.x, safe.y, 8, 0, Math.PI * 2);
+        context.fill();
+        context.fillStyle = PALETTE.safeDark;
+        context.beginPath();
+        context.arc(safe.x, safe.y, 3, 0, Math.PI * 2);
+        context.fill();
+        if (safe.progress > 0) {
+          context.strokeStyle = PALETTE.loot;
+          context.lineWidth = 4;
+          context.beginPath();
+          context.arc(safe.x, safe.y, 14, -Math.PI / 2, -Math.PI / 2 + safe.progress * Math.PI * 2);
+          context.stroke();
+        }
+        text('SAFE', safe.x, y + height + 14, 11, PALETTE.safe, 'center');
+      }
+    }
+  }
+
   function drawSmoke(state) {
     for (const cloud of state.smokes) {
       const fade = Math.min(1, cloud.left / 1);
@@ -415,6 +496,110 @@ export function createRenderer(canvas) {
       context.stroke();
       context.globalAlpha = 1;
     }
+  }
+
+  /** The HUD minimap: the whole gallery shrunk to a corner — walls, cases, palms,
+   *  guards with their cones, cameras, lasers, loot, the diamond, the exit and Rook —
+   *  so the room is readable at a glance instead of only what the frame shows. */
+  function drawMinimap(state) {
+    const mapX = 1052;
+    const mapY = 598;
+    const mapWidth = 204;
+    const mapHeight = 102;
+    const scaleX = mapWidth / ROOM.width;
+    const scaleY = mapHeight / ROOM.height;
+    const toMapX = (x) => mapX + (x - ROOM.x) * scaleX;
+    const toMapY = (y) => mapY + (y - ROOM.y) * scaleY;
+    text(`NIGHT ${state.night} — ${NIGHTS[state.night - 1].name}`, mapX + mapWidth, mapY - 10, 13, PALETTE.muted, 'right');
+    context.fillStyle = PALETTE.minimapBg;
+    context.fillRect(mapX - 4, mapY - 4, mapWidth + 8, mapHeight + 8);
+    context.strokeStyle = PALETTE.minimapEdge;
+    context.lineWidth = 2;
+    context.strokeRect(mapX - 4, mapY - 4, mapWidth + 8, mapHeight + 8);
+    context.fillStyle = 'rgba(123, 84, 51, 0.9)';
+    context.fillRect(mapX, mapY, mapWidth, mapHeight);
+    for (const solid of state.level.solids) {
+      context.fillStyle = '#3a2f22';
+      context.fillRect(toMapX(solid.x), toMapY(solid.y), Math.max(2, solid.width * scaleX), Math.max(2, solid.height * scaleY));
+    }
+    for (const plant of state.level.plants) {
+      context.fillStyle = PALETTE.plant;
+      context.beginPath();
+      context.arc(toMapX(plant.x), toMapY(plant.y), Math.max(2, plant.radius * scaleX), 0, Math.PI * 2);
+      context.fill();
+    }
+    for (const laser of state.lasers) {
+      const end = laserEnd(laser);
+      context.strokeStyle = laser.tripped ? PALETTE.laserHot : PALETTE.laser;
+      context.lineWidth = laser.tripped ? 2.5 : 1.5;
+      context.beginPath();
+      context.moveTo(toMapX(laser.x), toMapY(laser.y));
+      context.lineTo(toMapX(end.x), toMapY(end.y));
+      context.stroke();
+    }
+    for (const camera of state.cameras) {
+      context.strokeStyle = PALETTE.camConeEdge;
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(toMapX(camera.x), toMapY(camera.y));
+      context.lineTo(toMapX(camera.x + Math.cos(camera.angle) * CAMERA.sightRange), toMapY(camera.y + Math.sin(camera.angle) * CAMERA.sightRange));
+      context.stroke();
+      context.fillStyle = PALETTE.camera;
+      context.beginPath();
+      context.arc(toMapX(camera.x), toMapY(camera.y), 2.5, 0, Math.PI * 2);
+      context.fill();
+    }
+    for (const loot of state.level.smallLoot) {
+      if (loot.taken) continue;
+      context.fillStyle = PALETTE.loot;
+      context.fillRect(toMapX(loot.x) - 2, toMapY(loot.y) - 2, 4, 4);
+    }
+    const diamond = state.level.loot;
+    if (!diamond.taken) {
+      context.fillStyle = PALETTE.loot;
+      context.beginPath();
+      context.moveTo(toMapX(diamond.x), toMapY(diamond.y) - 4);
+      context.lineTo(toMapX(diamond.x) + 4, toMapY(diamond.y));
+      context.lineTo(toMapX(diamond.x), toMapY(diamond.y) + 4);
+      context.lineTo(toMapX(diamond.x) - 4, toMapY(diamond.y));
+      context.closePath();
+      context.fill();
+    }
+    for (const safe of state.safes) {
+      if (safe.cracked) continue;
+      context.fillStyle = PALETTE.safe;
+      context.fillRect(toMapX(safe.x) - 2, toMapY(safe.y) - 2, 4, 4);
+    }
+    const exit = state.level.exit;
+    context.fillStyle = PALETTE.exit;
+    context.fillRect(toMapX(exit.x), toMapY(exit.y), Math.max(3, exit.width * scaleX), Math.max(3, exit.height * scaleY));
+    for (const guard of state.guards) {
+      context.strokeStyle = guard.seen ? PALETTE.coneSeenEdge : PALETTE.coneEdge;
+      context.lineWidth = 1;
+      context.beginPath();
+      context.moveTo(toMapX(guard.x), toMapY(guard.y));
+      context.lineTo(toMapX(guard.x + Math.cos(guard.angle) * GUARD.sightRange), toMapY(guard.y + Math.sin(guard.angle) * GUARD.sightRange));
+      context.stroke();
+      context.fillStyle = guard.color;
+      context.beginPath();
+      context.arc(toMapX(guard.x), toMapY(guard.y), 3.5, 0, Math.PI * 2);
+      context.fill();
+      context.strokeStyle = PALETTE.text;
+      context.lineWidth = 1;
+      context.beginPath();
+      context.arc(toMapX(guard.x), toMapY(guard.y), 3.5, 0, Math.PI * 2);
+      context.stroke();
+    }
+    // Rook, ringed white so the thief is never lost on the map.
+    context.fillStyle = PALETTE.thief;
+    context.beginPath();
+    context.arc(toMapX(state.thief.x), toMapY(state.thief.y), 4, 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = PALETTE.text;
+    context.lineWidth = 1.5;
+    context.beginPath();
+    context.arc(toMapX(state.thief.x), toMapY(state.thief.y), 4, 0, Math.PI * 2);
+    context.stroke();
   }
 
   function drawHud(state) {
@@ -509,16 +694,17 @@ export function createRenderer(canvas) {
   }
 
   /** The title strip: a slim band across the top of the room, so the title screen names
-   *  the game, its goal and its controls without hiding the room behind a panel — the
-   *  cover shot has to show the whole heist in one frame. */
-  function drawTitleStrip(best) {
+   *  the game, its feature checklist and its controls without hiding the room behind a
+   *  panel — the cover shot has to show the whole heist in one frame. */
+  function drawTitleStrip(state, best) {
+    const night = NIGHTS[state.night - 1];
     context.fillStyle = 'rgba(10, 14, 12, 0.85)';
     context.fillRect(ROOM.x, ROOM.y, ROOM.width, 52);
     context.fillStyle = PALETTE.loot;
     context.fillRect(ROOM.x, ROOM.y + 52, ROOM.width, 2);
     text('THE GILDED VAULT', ROOM.x + 16, ROOM.y + 36, 30, PALETTE.loot, 'left');
-    text('Steal the Sunspire Diamond, then reach the service exit.', FIELD.width - 24, ROOM.y + 22, 15, PALETTE.text, 'right');
-    text(`WASD move · Shift sneak · Click / E coin lure · Q smoke (2 coins) · Space to start · Best ${best}`, FIELD.width - 24, ROOM.y + 42, 14, PALETTE.muted, 'right');
+    text('3 nights · laser grids · crackable safes · 7 guards · live minimap', FIELD.width - 24, ROOM.y + 22, 15, PALETTE.text, 'right');
+    text(`Night ${state.night} — ${night.name} · 1/2/3 select night · WASD move · Shift sneak · Click/E coin · Q smoke · hold E crack safe · Space to start · Best ${best}`, FIELD.width - 24, ROOM.y + 42, 14, PALETTE.muted, 'right');
   }
 
   /** A soft vignette: the gallery's edges fall into shadow, the middle stays lit. */
@@ -540,13 +726,16 @@ export function createRenderer(canvas) {
     drawCover(state);
     drawExit(state);
     drawLoot(state, time);
+    drawLasers(state, time);
     drawSmoke(state);
     drawGuards(state);
     drawCameras(state, time);
     drawThief(state, time);
     drawWalls(state);
+    drawSafes(state);
     drawVignette();
     drawHud(state);
+    drawMinimap(state);
     context.textBaseline = 'alphabetic';
     text('GOAL: Lift the Sunspire Diamond, then reach the SERVICE EXIT — two routes: the carpet hall or the side passage.', FIELD.width / 2, FIELD.height - 30, 15, PALETTE.muted, 'center');
     // The SPOTTED! flash: a red banner and a red edge while the grace runs.
@@ -559,23 +748,26 @@ export function createRenderer(canvas) {
       text(`SPOTTED! ${state.spottedBy} saw Rook — break away!`, FIELD.width / 2, FIELD.hudHeight + 52, 30, PALETTE.alarmHigh, 'center');
       context.globalAlpha = 1;
     }
+    // The laser-trip flash: a red warning while Rook is standing on a beam.
+    if (state.laserTripped) {
+      const pulse = 0.65 + 0.35 * Math.sin(time * 18);
+      context.globalAlpha = pulse;
+      text('LASER TRIP! Get off the beam!', FIELD.width / 2, FIELD.hudHeight + 52, 26, PALETTE.laserHot, 'center');
+      context.globalAlpha = 1;
+    }
     if (screen === SCREEN_TITLE) {
-      drawTitleStrip(best);
+      drawTitleStrip(state, best);
     } else if (screen === SCREEN_PAUSED) {
       drawPanel('Paused', ['The guards will wait. The diamond will not.'], 'Press P to keep stealing', PALETTE.muted);
     } else if (screen === SCREEN_WIN) {
       const breakdown = state.breakdown;
-      drawPanel(
-        'CLEAN GETAWAY',
-        [
-          `Loot ${breakdown.loot} · Diamond ${breakdown.diamond}`,
-          `Time bonus ${breakdown.time} · Coins left ${breakdown.coins}`,
-          `TOTAL ${state.score}`,
-          `Best ${best}`,
-        ],
-        'Press Space to steal again',
-        PALETTE.exit,
-      );
+      const lines = [
+        `Loot ${breakdown.loot} · Diamond ${breakdown.diamond}`,
+        `Time bonus ${breakdown.time} · Coins left ${breakdown.coins}`,
+      ];
+      if (breakdown.safes > 0) lines.push(`Safes cracked ${breakdown.safes}`);
+      lines.push(`TOTAL ${state.score}`, `Best ${best}`);
+      drawPanel('CLEAN GETAWAY', lines, 'Press Space to steal again', PALETTE.exit);
     } else if (screen === SCREEN_OVER) {
       drawPanel(
         'CAUGHT',

@@ -2,7 +2,7 @@
 // and crates that block sight, the potted palms that hide a thief, the vault alcove holding the
 // Sunspire Diamond, and the service exit. Also the line-of-sight test the guards and cameras
 // share: a sight line is blocked when it crosses any solid rectangle.
-import { FIELD } from './config.js';
+import { FIELD, NIGHTS } from './config.js';
 
 export const ROOM = {
   x: FIELD.wall,
@@ -60,8 +60,15 @@ export function clampToRoom(x, y, radius) {
  * The gallery, laid out once: the vault alcove top-right with the diamond's pedestal, the
  * service exit bottom-left, display cases and crates as sight-blocking cover, potted palms as
  * hiding spots, three small-loot pieces on the way, and the beats the guards walk.
+ *
+ * `night` (1-3) raises the heat: Night 2 adds a sixth guard, two sweeping laser grids and
+ * two crackable wall safes; Night 3 adds a seventh guard, a tighter timer and two more
+ * pieces of small loot. The layout itself never changes, so every night is still the same
+ * gallery the thief knows — only the watch gets harder.
  */
-export function buildLevel() {
+export function buildLevel(random, night) {
+  const nightIndex = night === 2 ? 1 : night === 3 ? 2 : 0;
+  const spec = NIGHTS[nightIndex];
   const solids = [
     // The vault alcove: three solid walls, open at the bottom where the thief slips in —
     // and a side passage cut through its west wall, a second way into the vault that
@@ -93,6 +100,11 @@ export function buildLevel() {
     // A gold bar stashed just outside the side passage: the second route pays.
     { x: 955, y: 200, taken: false, kind: 'bar' },
   ];
+  if (spec.extraLoot > 0) {
+    // Night 3 stashes two more pieces on the far side of the hall.
+    smallLoot.push({ x: 130, y: 200, taken: false, kind: 'bar' });
+    smallLoot.push({ x: 700, y: 620, taken: false, kind: 'case' });
+  }
   const guardBeats = [
     {
       name: 'Ash',
@@ -139,16 +151,59 @@ export function buildLevel() {
       points: [{ x: 520, y: 200 }],
     },
   ];
+  if (spec.guards >= 6) {
+    // Night 2: Onyx walks the west wall, watching the palms by the service exit.
+    guardBeats.push({
+      name: 'Onyx',
+      kind: 'patrol',
+      color: '#3a2b4d',
+      points: [
+        { x: 180, y: 180 },
+        { x: 180, y: 520 },
+      ],
+    });
+  }
+  if (spec.guards >= 7) {
+    // Night 3: Fern stands mid-hall and scans the carpet, so the straight run is watched.
+    guardBeats.push({
+      name: 'Fern',
+      kind: 'watcher',
+      color: '#2b4d3a',
+      baseAngle: Math.PI / 2,
+      points: [{ x: 700, y: 200 }],
+    });
+  }
   const cameraMounts = [
     { x: ROOM.x + 2, y: 300, baseAngle: 0, sweep: 0.7, phase: 0 },
     { x: ROOM.x + ROOM.width - 2, y: 380, baseAngle: Math.PI, sweep: 0.7, phase: 1.4 },
   ];
+  // Laser grids (Night 2+): one sweeping the north hall from the top wall, one guarding
+  // the vault approach from the east wall. Each beam swings on its own phase, so the two
+  // grids never line up the same way twice in a row.
+  const laserMounts = [];
+  if (spec.lasers >= 2) {
+    laserMounts.push(
+      { x: 640, y: ROOM.y + 16, baseAngle: Math.PI / 2, sweep: 0.45, phase: 0, length: 240 },
+      { x: ROOM.x + ROOM.width - 2, y: 300, baseAngle: Math.PI, sweep: 0.4, phase: 2.1, length: 230 },
+    );
+  }
+  // Wall safes (Night 2+): one set into the north wall, one into the south wall.
+  const safes = [];
+  if (spec.safes >= 2) {
+    safes.push(
+      { x: 400, y: ROOM.y + 16, progress: 0, cracked: false },
+      { x: 1050, y: ROOM.y + ROOM.height - 12, progress: 0, cracked: false },
+    );
+  }
   return {
     solids,
     plants,
     smallLoot,
     guardBeats,
     cameraMounts,
+    laserMounts,
+    safes,
+    timerStart: spec.timer,
     loot: { x: 1130, y: 150, taken: false },
     exit: { x: 80, y: ROOM.y + ROOM.height - 58, width: 120, height: 58 },
     spawn: { x: 140, y: ROOM.y + ROOM.height - 90 },
